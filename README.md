@@ -9,7 +9,7 @@ The script is **idempotent**: run it again after any change (a new key, a new
 setting) and it brings the server to the described state without breaking what
 is already there.
 
-**Version:** 1.1.0
+**Version:** 1.1.1
 
 ---
 
@@ -27,8 +27,10 @@ is already there.
   - [Users and access](#users-and-access)
     - [Storing the keys in git](#storing-the-keys-in-git)
   - [Repository structure](#repository-structure)
+    - [Changing the `app-*` commands](#changing-the-app--commands)
   - [Logs and troubleshooting](#logs-and-troubleshooting)
   - [Changelog](#changelog)
+    - [1.1.1](#111)
     - [1.1.0](#110)
     - [1.0.0](#100)
   - [License](#license)
@@ -245,9 +247,38 @@ lib/
   firewall.sh       UFW
   docker.sh         Docker CE and daemon config
   repo.sh           deploy key, project clone, .env creation
-  app.sh            app-* scripts
+  app.sh            app-* scripts: builds them from templates/
   scripts.sh        install/remove scripts, sudo rules
   systemd.sh, autostart.sh   systemd helpers
+templates/
+  app-common.sh     helpers shared by the scripts below: lock, branch list, deploy
+  app-deploy.sh     body of app-deploy
+  app-fetch.sh      body of app-fetch
+  app-branch.sh     body of app-branch (installed on a test server only)
+```
+
+### Changing the `app-*` commands
+
+The commands in `/usr/local/bin` are generated on every run of `setup.sh`, so
+**do not edit them on the server**: the next run overwrites them.
+
+- `app-start`, `app-stop`, `app-restart`, `app-status`, `app-logs` are one-line
+  `docker compose` calls in `lib/app.sh`.
+- `app-deploy`, `app-fetch`, `app-branch` are built by `lib/app.sh` from three parts:
+  1. the settings (`APP_DIR`, `REPO_BRANCH`, `IS_PRODUCTION`, …) written at the top;
+  2. `templates/app-common.sh`;
+  3. `templates/<name>.sh`.
+
+To change a command, edit its template and run `sudo ./setup.sh` again. If a
+template is missing or has a syntax error, `setup.sh` stops and the installed
+command stays as it was.
+
+The templates are normal bash files, so editors highlight them and they can be
+checked before a run:ц
+
+```bash
+bash -n setup.sh lib/*.sh templates/*.sh
+shellcheck templates/*.sh
 ```
 
 ## Logs and troubleshooting
@@ -259,6 +290,12 @@ lib/
 - sudo asks for a password for an `app-*` command → the command was run with arguments, or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
 
 ## Changelog
+
+### 1.1.1
+
+- The bodies of `app-deploy` / `app-fetch` / `app-branch` moved from heredocs in `lib/app.sh`
+  to `templates/*.sh`: normal bash files that `bash -n` and `shellcheck` can check.
+  The commands work the same as in 1.1.0.
 
 ### 1.1.0
 

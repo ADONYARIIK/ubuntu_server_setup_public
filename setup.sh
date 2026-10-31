@@ -4,7 +4,7 @@
 # Log: /var/log/server_setup_<date>_<time>.log (one file per run)
 
 
-# Version: 1.1.0
+# Version: 1.1.1
 # Usage: sudo ./setup.sh
 
 set -euo pipefail
@@ -15,7 +15,7 @@ export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
 # Script metadata
 # Keep in sync with "Version:" in the header
-SCRIPT_VERSION="1.1.0"
+SCRIPT_VERSION="1.1.1"
 # Absolute path of the directory with this script, so lib/ is found from any cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/server_setup_$(date +%Y%m%d_%H%M%S).log"
