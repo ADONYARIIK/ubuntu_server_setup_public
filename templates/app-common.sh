@@ -20,7 +20,8 @@ remote_branches() {
 deploy() {
     cd "$APP_DIR"
 
-    if [ -f .env ]; then chmod 600 .env; fi
+    # ENV_FILE is relative to APP_DIR (the current directory here)
+    if [ -f "$ENV_FILE" ]; then chmod 600 "$ENV_FILE"; fi
 
     # Production always runs REPO_BRANCH, even if this server was a test server before
     if [ "$IS_PRODUCTION" = true ] && [ "$(git branch --show-current)" != "$REPO_BRANCH" ]; then

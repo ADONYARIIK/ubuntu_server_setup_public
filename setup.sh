@@ -4,7 +4,7 @@
 # Log: /var/log/server_setup_<date>_<time>.log (one file per run)
 
 
-# Version: 1.1.1
+# Version: 1.1.2
 # Usage: sudo ./setup.sh
 
 set -euo pipefail
@@ -15,7 +15,7 @@ export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
 # Script metadata
 # Keep in sync with "Version:" in the header
-SCRIPT_VERSION="1.1.1"
+SCRIPT_VERSION="1.1.2"
 # Absolute path of the directory with this script, so lib/ is found from any cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/server_setup_$(date +%Y%m%d_%H%M%S).log"
@@ -51,9 +51,12 @@ REPO_URL="git@github.com:USER/REPO.git"
 REPO_BRANCH="main"
 # Private key root uses to pull from GitHub (add the .pub as a Deploy key)
 DEPLOY_KEY="/root/.ssh/deploy_key"
-# Template for the project's .env (path inside APP_DIR). Copied to .env once,
-# right after the clone; an existing .env is never overwritten
+# The project's .env and its template, paths inside APP_DIR
+# (e.g. "backend/.env" and "backend/.env.example" if Laravel is in a subfolder).
+# ENV_EXAMPLE is copied to ENV_FILE once, right after the clone;
+# an existing ENV_FILE is never overwritten
 ENV_EXAMPLE=".env.example"
+ENV_FILE=".env"
 
 # Load common.sh first: every other module uses log/warn/error from it
 source "$SCRIPT_DIR"/lib/common.sh
@@ -79,6 +82,16 @@ main() {
         *) error "IS_PRODUCTION must be true or false, got: '${IS_PRODUCTION}'"
                exit 1 ;;
     esac
+
+    # Both are joined to APP_DIR: "/srv/app/backend/.env" here would become
+    # "/srv/app//srv/app/backend/.env", and .env would silently stay unprotected
+    local path
+    for path in "$ENV_EXAMPLE" "$ENV_FILE"; do
+        case "$path" in
+            /*|*..*) error "ENV_EXAMPLE and ENV_FILE must be paths inside APP_DIR (like backend/.env), got: '${path}'"
+                     exit 1 ;;
+        esac
+    done
 
     # Fresh server: unattended-upgrades holds the dpkg lock right after boot.
     # apt-get install/remove (also inside the Tailscale installer) wait instead of failing
@@ -152,7 +165,7 @@ main() {
     log "=== Manual steps (only once) ==="
     log "1. sudo tailscale up  (authorize the server in Tailscale)"
     log "2. If the clone failed: add root's deploy key to GitHub and re-run setup.sh"
-    log "3. Fill in ${APP_DIR}/.env (created from ${ENV_EXAMPLE}): sudo vim ${APP_DIR}/.env"
+    log "3. Fill in ${APP_DIR}/${ENV_FILE} (created from ${ENV_EXAMPLE}): sudo vim ${APP_DIR}/${ENV_FILE}"
     log "4. First start: sudo app-deploy"
 }
 

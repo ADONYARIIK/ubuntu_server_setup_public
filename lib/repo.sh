@@ -21,33 +21,35 @@ _ensure_deploy_key() {
     fi
 }
 
-# _ensure_env_file - create APP_DIR/.env from APP_DIR/ENV_EXAMPLE if .env does not exist.
+# _ensure_env_file - create APP_DIR/ENV_FILE from APP_DIR/ENV_EXAMPLE if .env does not exist.
 # An existing .env is NEVER overwritten: it holds the real secrets.
 # Permissions 600 root:root are (re)applied on every run: the repo is readable
 # by every user, the secrets must not be
 _ensure_env_file() {
-    local env_file="${APP_DIR}/.env"
+    local env_path="${APP_DIR}/${ENV_FILE}"
     local example="${APP_DIR}/${ENV_EXAMPLE}"
 
-    if [ -f "$env_file" ]; then
-        log ".env already exists, content not touched: $env_file"
+    if [ -f "$env_path" ]; then
+        log ".env already exists, content not touched: $env_path"
     elif [ -f "$example" ]; then
         # umask 077 in a subshell: the copy is created as 600 right away,
         # it is never readable by others, not even for a moment
-        (umask 077; cp "$example" "$env_file")
-        warn "Created $env_file from $ENV_EXAMPLE - fill in the real values: sudo vim $env_file"
+        (umask 077; cp "$example" "$env_path")
+        warn "Created $env_path from $ENV_EXAMPLE - fill in the real values: sudo vim $env_path"
     else
-        warn "$example not found - create $env_file by hand (it gets chmod 600 on the next run)"
+        warn "$example not found - create $env_path by hand (it gets chmod 600 on the next run)"
         return 0
     fi
 
-    chown root:root "$env_file"
-    chmod 600 "$env_file"
-    log "Permissions set: $env_file (600 root:root)"
+    chown root:root "$env_path"
+    chmod 600 "$env_path"
+    log "Permissions set: $env_path (600 root:root)"
 
     # A committed .env would leak secrets on the next push from someone's laptop
-    if ! git -C "$APP_DIR" check-ignore -q .env; then
-        warn ".env is NOT in the project's .gitignore - add it there"
+    # ENV_FILE is relative to APP_DIR, so it is checked from there
+    # (a .gitignore in its own subfolder counts too)
+    if ! git -C "$APP_DIR" check-ignore -q -- "$ENV_FILE"; then
+        warn "$ENV_FILE is NOT in the project's .gitignore - add it there"
     fi
 }
 

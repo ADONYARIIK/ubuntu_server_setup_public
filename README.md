@@ -9,7 +9,7 @@ The script is **idempotent**: run it again after any change (a new key, a new
 setting) and it brings the server to the described state without breaking what
 is already there.
 
-**Version:** 1.1.1
+**Version:** 1.1.2
 
 ---
 
@@ -30,6 +30,7 @@ is already there.
     - [Changing the `app-*` commands](#changing-the-app--commands)
   - [Logs and troubleshooting](#logs-and-troubleshooting)
   - [Changelog](#changelog)
+    - [1.1.2](#112)
     - [1.1.1](#111)
     - [1.1.0](#110)
     - [1.0.0](#100)
@@ -49,7 +50,8 @@ In order:
 6. Hardens SSH: key login only, no root login, no password login.
 7. Firewall (UFW): only SSH, 80 and 443 are open. Enables fail2ban.
 8. Installs Docker CE + Compose plugin, with log rotation.
-9. Clones the project into `APP_DIR` with a read-only deploy key and **creates `.env` from `.env.example`**.
+9. Clones the project into `APP_DIR` with a read-only deploy key and **creates `.env` from `.env.example`**
+   (they can be in a subfolder, see [The `.env` file](#the-env-file)).
 10. Installs the `app-*` scripts and lets team members run them with `sudo`.
 
 ## Quick start
@@ -63,7 +65,8 @@ cp ~/admin.pub  keys/admin.pub
 cp ~/anna.pub   keys/anna.pub
 
 # 2. Edit the settings block at the top of setup.sh
-#    (at least REPO_URL and IS_PRODUCTION)
+#    (at least REPO_URL and IS_PRODUCTION; ENV_FILE / ENV_EXAMPLE
+#    if Laravel is not in the root of the project)
 vim setup.sh
 
 # 3. Run
@@ -75,7 +78,8 @@ After the first run, once:
 1. `sudo tailscale up` - authorize the server in Tailscale.
 2. Add root's deploy key (printed by the script, `/root/.ssh/deploy_key.pub`) to GitHub:
    project repo → **Settings → Deploy keys** (read-only). If the clone failed because of this, run `sudo ./setup.sh` again.
-3. Fill in the real values in `.env`: `sudo vim /srv/app/.env`.
+3. Fill in the real values in `.env`: `sudo vim /srv/app/.env` (the path is `APP_DIR/ENV_FILE`,
+   e.g. `/srv/app/backend/.env`).
 4. First start: `sudo app-deploy`.
 
 > ⚠️ Make sure at least one admin has a key in `keys/` **before** the first run:
@@ -99,7 +103,8 @@ All settings are at the top of `setup.sh`.
 | `REPO_URL` | `git@github.com:USER/REPO.git` | SSH URL of the project |
 | `REPO_BRANCH` | `main` | Main branch: cloned first, the only one on production |
 | `DEPLOY_KEY` | `/root/.ssh/deploy_key` | Root's private key for GitHub |
-| `ENV_EXAMPLE` | `.env.example` | Template `.env` is created from (path inside `APP_DIR`) |
+| `ENV_EXAMPLE` | `.env.example` | Template the `.env` is created from (path inside `APP_DIR`, e.g. `backend/.env.example`) |
+| `ENV_FILE` | `.env` | The project's `.env` (path inside `APP_DIR`, e.g. `backend/.env`). Must be the same file `compose.prod.yaml` uses |
 
 ## Production vs test server (`IS_PRODUCTION`)
 
@@ -169,7 +174,8 @@ Done. Branch 'feature/login' is running. Back to the main branch: sudo app-branc
 - **New commits pushed to the same branch?** `sudo app-deploy`.
 - **Branch was force-pushed (rebase)?** `app-deploy` stops (`--ff-only`); run `sudo app-branch` and pick the same branch again - it resets to the GitHub version.
 - **Done testing?** `sudo app-branch` → `main`.
-- **New variables in `.env.example` of the branch?** `app-branch` prints their names (never values). Ask an admin to add them to `.env`.
+- **New variables in `.env.example` of the branch?** `app-branch` compares `ENV_EXAMPLE` with `ENV_FILE` and prints the names
+  of the missing ones (never values). Ask an admin to add them to `.env`.
 - **Branch was merged and deleted on GitHub?** `app-deploy` fails ("no such ref was fetched"): run `sudo app-branch` → `main`.
 
 Things to keep in mind:
@@ -180,25 +186,39 @@ Things to keep in mind:
 
 ## The `.env` file
 
+The `.env` does not have to be in the root of the project. If Laravel lives in a
+subfolder (for example next to a frontend), point both settings there:
+
+```bash
+ENV_EXAMPLE="backend/.env.example"
+ENV_FILE="backend/.env"
+```
+
+Both are paths inside `APP_DIR`. An absolute path or `..` stops the script with
+an error.
+
 Right after the project is cloned, `setup.sh`:
 
-1. copies `APP_DIR/.env.example` → `APP_DIR/.env` (only if `.env` does not exist yet);
+1. copies `APP_DIR/ENV_EXAMPLE` → `APP_DIR/ENV_FILE` (only if `ENV_FILE` does not exist yet);
 2. sets owner `root:root` and mode `600` - the project directory is readable by every
    user, the secrets are not;
-3. warns if `.env` is not listed in the project's `.gitignore`.
+3. warns if `ENV_FILE` is not ignored by git (a `.gitignore` in its own subfolder counts too).
 
-An existing `.env` is **never overwritten**: re-running `setup.sh` only fixes its
-permissions. If the project has no `.env.example`, the script warns and you
-create `.env` by hand.
+An existing `ENV_FILE` is **never overwritten**: re-running `setup.sh` only fixes its
+permissions. If the project has no `ENV_EXAMPLE`, the script warns and you
+create the file by hand.
+
+> `ENV_FILE` only tells `setup.sh` and the `app-*` commands where the file is.
+> `compose.prod.yaml` must use the same file itself, e.g. `env_file: ./backend/.env`.
 
 The admin then only edits the values:
 
 ```bash
-sudo vim /srv/app/.env
+sudo vim /srv/app/.env      # APP_DIR/ENV_FILE, e.g. /srv/app/backend/.env
 sudo app-deploy
 ```
 
-`app-deploy` also re-applies `chmod 600` on every run.
+`app-deploy` also re-applies `chmod 600` to `ENV_FILE` on every run.
 
 ## Users and access
 
@@ -274,7 +294,7 @@ template is missing or has a syntax error, `setup.sh` stops and the installed
 command stays as it was.
 
 The templates are normal bash files, so editors highlight them and they can be
-checked before a run:ц
+checked before a run:
 
 ```bash
 bash -n setup.sh lib/*.sh templates/*.sh
@@ -290,6 +310,13 @@ shellcheck templates/*.sh
 - sudo asks for a password for an `app-*` command → the command was run with arguments, or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
 
 ## Changelog
+
+### 1.1.2
+
+- **`ENV_FILE`** setting: path of the project's `.env` inside `APP_DIR` (default `.env`), for projects
+  where Laravel is in a subfolder (`backend/.env`). Used to create the file, set its `600` permissions,
+  check `.gitignore` and find missing variables in `app-branch`. With the default value nothing changes.
+- `ENV_EXAMPLE` and `ENV_FILE` are checked at start: an absolute path or `..` stops the script with an error.
 
 ### 1.1.1
 

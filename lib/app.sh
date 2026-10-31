@@ -17,6 +17,7 @@ _app_script_header() {
     printf 'REPO_BRANCH=%q\n' "$REPO_BRANCH"
     printf 'IS_PRODUCTION=%q\n' "$IS_PRODUCTION"
     printf 'ENV_EXAMPLE=%q\n' "$ENV_EXAMPLE"
+    printf 'ENV_FILE=%q\n' "$ENV_FILE"
     printf 'APP_SERVICE=%q\n' "$APP_SERVICE"
     printf 'APP_LOCK=%q\n' "$APP_LOCK"
     printf 'COMPOSE=(docker compose -f %q --project-directory %q)\n' \

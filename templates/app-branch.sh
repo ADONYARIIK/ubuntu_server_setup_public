@@ -63,12 +63,12 @@ echo "Now on branch: $branch ($(git log -1 --format='%h %s'))"
 
 # The new branch may expect variables the current .env does not have.
 # Only names are printed, never values
-if [ -f .env ] && [ -f "$ENV_EXAMPLE" ]; then
+if [ -f "$ENV_FILE" ] && [ -f "$ENV_EXAMPLE" ]; then
     mapfile -t missing < <(comm -23 \
         <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_EXAMPLE" | tr -d '=' | sort -u) \
-        <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' .env | tr -d '=' | sort -u))
+        <(grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' "$ENV_FILE" | tr -d '=' | sort -u))
     if [ "${#missing[@]}" -gt 0 ]; then
-        echo "WARNING: $ENV_EXAMPLE of this branch has variables missing in .env (ask an admin to add them):"
+        echo "WARNING: $ENV_EXAMPLE of this branch has variables missing in $ENV_FILE (ask an admin to add them):"
         printf '  %s\n' "${missing[@]}"
     fi
 fi
