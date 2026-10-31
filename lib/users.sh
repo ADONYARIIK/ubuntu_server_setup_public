@@ -127,6 +127,13 @@ setup_team_users() {
     for keyfile in "$SCRIPT_DIR"/keys/*.pub; do
         [ -e "$keyfile" ] || continue
         username="$(basename "$keyfile" .pub)"
+
+        # adduser accepts only these names (NAME_REGEX); its own error is visible only in the log
+        if ! [[ "$username" =~ ^[a-z][-a-z0-9_]*$ ]]; then
+            error "Bad key file name: keys/${username}.pub (a-z, 0-9, - and _, must start with a letter)"
+            return 1
+        fi
+
         if ! id "$username" &>/dev/null; then
             adduser --disabled-password --comment "" "$username" >> "$LOG_FILE" 2>&1
             add_to_group "$username" "$TEAM_GROUP"

@@ -51,6 +51,20 @@ create_script() {
     _install_file "$tmp" "${SCRIPTS_BIN}/${name}" 0755
 }
 
+# remove_script NAME - delete /usr/local/bin/NAME if it exists.
+# For scripts turned off by a setting (app-branch when IS_PRODUCTION=true):
+# the file must disappear, not just lose its sudo rule
+remove_script() {
+    local target="$SCRIPTS_BIN/$1"
+
+    if [ -e "$target" ]; then
+        rm -f "$target"
+        log "Removed script: $target"
+    else
+        log "Script not installed (nothing to remove): $target"
+    fi
+}
+
 # grant_script_access USER SCRIPT... - allow USER to run the given scripts
 # with "sudo SCRIPT" without a password. Rewrites the user's rule file
 # from scratch, so always pass the FULL list of scripts.

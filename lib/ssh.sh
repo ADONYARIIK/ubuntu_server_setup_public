@@ -52,9 +52,19 @@ AllowTcpForwarding no
 PrintMotd no
 UseDNS no"
     
+    # sshd -t needs /run/sshd, but only a running ssh.service creates it
+    # (24.04 starts it on the first SSH connection, via ssh.socket)
+    install -d -m 0755 /run/sshd
+
     # Validate the config before restarting
     # A broken sshd config = lost remote access, so never reload without checking
     if sshd -t >> "$LOG_FILE" 2>&1; then
+        # 24.04: the port belongs to ssh.socket, regenerated from sshd_config on daemon-reload
+        if [ "$CONFIG_CHANGED" -eq 1 ] && systemctl is-enabled --quiet ssh.socket 2>/dev/null; then
+            systemctl daemon-reload
+            systemctl restart ssh.socket
+        fi
+
         systemctl try-reload-or-restart ssh
         log "SSH configuration applied"
     else

@@ -36,7 +36,7 @@ Signed-By: ${keyring}"
     
     if [ "$CONFIG_CHANGED" -eq 1 ]; then
         # Refresh package lists so apt sees the newly added repository
-        apt-get update -qq >> "$LOG_FILE" 2>&1
+        apt_update
     fi
     
     # Distro/unofficial Docker packages conflict with docker-ce (per Docker docs)

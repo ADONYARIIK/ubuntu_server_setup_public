@@ -1,5 +1,23 @@
 # shellcheck shell=bash
 
+# apt_update - "apt-get update" with retries. DPkg::Lock::Timeout does NOT cover
+# the lists lock: while apt-daily refreshes the lists, apt-get update fails at once
+apt_update() {
+    local try
+
+    for try in 1 2 3 4 5 6 7 8 9 10; do
+        if apt-get update -qq >> "$LOG_FILE" 2>&1; then
+            return 0
+        fi
+
+        warn "apt-get update failed (attempt ${try}/10, another apt running?), retrying in 30s"
+        sleep 30
+    done
+
+    error "apt-get update keeps failing, see $LOG_FILE"
+    return 1
+}
+
 # package_installed PKG - returns 0 if PKG is installed
 # ("ii" in dpkg -l = desired: install, status: installed)
 package_installed() {
