@@ -30,12 +30,26 @@ ensure_admin_keys() {
 # Check the effective config with: sshd -T
 configure_sshd() {
     local config_file="/etc/ssh/sshd_config.d/00-hardened.conf"
-    
+    local forwarding="AllowTcpForwarding no"
+    local port permit=""
+
+    # Test server: "ssh -L" to the dev tools published on the server's 127.0.0.1
+    # (Mailpit, RustFS console). "local" = only -L (no -R), and PermitOpen limits
+    # it to exactly these ports. Production: no forwarding at all
+    if [ "$IS_PRODUCTION" = false ] && [ "${#TUNNEL_PORTS[@]}" -gt 0 ]; then
+        for port in "${TUNNEL_PORTS[@]}"; do
+            permit+=" 127.0.0.1:${port}"
+        done
+        forwarding="AllowTcpForwarding local
+PermitOpen${permit}"
+    fi
+ 
     # PermitRootLogin no          - log in as a normal user, then use sudo
     # PasswordAuthentication no   - keys only (deploy keys BEFORE this runs!)
     # MaxAuthTries 3              - drop the connection after 3 failed attempts
     # ClientAlive* 300 x 2        - disconnect dead clients after ~10 min
-    # X11/Agent/TcpForwarding no  - no forwarding (breaks VS Code Remote-SSH and ssh -L)
+    # X11/AgentForwarding no      - no forwarding (TCP: see above; breaks VS Code Remote-SSH)
+    # AllowStreamLocalForwarding  - no Unix socket forwarding (e.g. docker.sock), on by default
     # UseDNS no                   - no reverse DNS lookup, faster login
     write_config "$config_file" "Port ${SSH_PORT}
 PermitRootLogin no
@@ -48,7 +62,8 @@ ClientAliveInterval 300
 ClientAliveCountMax 2
 X11Forwarding no
 AllowAgentForwarding no
-AllowTcpForwarding no
+${forwarding}
+AllowStreamLocalForwarding no
 PrintMotd no
 UseDNS no"
     

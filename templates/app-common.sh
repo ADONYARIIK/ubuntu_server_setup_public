@@ -1,7 +1,7 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2154,SC2164 # variables come from the generated header, "set -e" is added by create_script
 
-# Exit if another app-deploy/app-fetch/app-branch is running right now
+# Exit if another app-deploy/app-fetch/app-branch/app-update-languages is running right now
 take_lock() {
     exec 9>"$APP_LOCK"
     if ! flock -n 9; then

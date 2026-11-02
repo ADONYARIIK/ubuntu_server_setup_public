@@ -9,7 +9,7 @@ The script is **idempotent**: run it again after any change (a new key, a new
 setting) and it brings the server to the described state without breaking what
 is already there.
 
-**Version:** 1.1.2
+**Version:** 1.2.0
 
 ---
 
@@ -26,10 +26,12 @@ is already there.
   - [The `.env` file](#the-env-file)
   - [Users and access](#users-and-access)
     - [Storing the keys in git](#storing-the-keys-in-git)
+  - [Commands for admins](#commands-for-admins)
   - [Repository structure](#repository-structure)
     - [Changing the `app-*` commands](#changing-the-app--commands)
   - [Logs and troubleshooting](#logs-and-troubleshooting)
   - [Changelog](#changelog)
+    - [1.2.0](#120)
     - [1.1.2](#112)
     - [1.1.1](#111)
     - [1.1.0](#110)
@@ -47,12 +49,14 @@ In order:
 3. Keeps a laptop running as a server with the lid closed (all sleep modes off).
 4. Creates one user per `keys/<name>.pub` and removes team users whose key file was deleted.
 5. Gives admins (`ADMIN_USERS`) full `sudo`.
-6. Hardens SSH: key login only, no root login, no password login.
-7. Firewall (UFW): only SSH, 80 and 443 are open. Enables fail2ban.
+6. Hardens SSH: key login only, no root login, no password login, no port forwarding
+   (a test server can allow `ssh -L` to `TUNNEL_PORTS`).
+7. Firewall (UFW): only SSH and `FIREWALL_PORTS` (80 and 443 by default) are open. Enables fail2ban.
 8. Installs Docker CE + Compose plugin, with log rotation.
 9. Clones the project into `APP_DIR` with a read-only deploy key and **creates `.env` from `.env.example`**
    (they can be in a subfolder, see [The `.env` file](#the-env-file)).
-10. Installs the `app-*` scripts and lets team members run them with `sudo`.
+10. Installs the `app-*` scripts and lets team members run them with `sudo`, plus admin-only
+    commands (`ADMIN_SCRIPTS`, e.g. `app-db`).
 
 ## Quick start
 
@@ -93,18 +97,38 @@ All settings are at the top of `setup.sh`.
 |---|---|---|
 | `IS_PRODUCTION` | `true` | `true` = production server, `false` = test server (see below) |
 | `SSH_PORT` | `22` | SSH port (firewall uses the same value) |
+| `FIREWALL_PORTS` | `(80/tcp 443/tcp)` | Ports UFW opens besides SSH. `()` when the app is reached only through an outbound tunnel (Cloudflare Tunnel): nothing has to be open |
 | `ADMIN_USERS` | `("admin")` | Users with full `sudo`. Need a key in `keys/` or an existing account with `authorized_keys` |
 | `TEAM_GROUP` | `team` | Group that marks users created from `keys/`. Only its members can be removed automatically |
 | `TIMEZONE` | `Europe/Warsaw` | Server timezone |
 | `APP_DIR` | `/srv/app` | Where the project is cloned |
-| `COMPOSE_FILE` | `compose.prod.yaml` | Compose file inside the project |
+| `COMPOSE_FILE_PROD` | `compose.prod.yaml` | Compose file of a production server (path inside `APP_DIR`, e.g. `backend/compose.prod.yaml`) |
+| `COMPOSE_FILE_DEV` | *(empty)* | Compose file of a test server (`IS_PRODUCTION=false`), e.g. `compose.dev.yaml`. Empty = `COMPOSE_FILE_PROD` |
 | `APP_SERVICE` | `app` | Laravel service name (used for `php artisan`) |
-| `APP_SCRIPTS` | `app-start … app-fetch` | Scripts the team may run with `sudo` (`app-branch` is added automatically on a test server) |
+| `DB_SERVICE` | `pgsql` | Database service (official PostgreSQL, MySQL or MariaDB image), used by the admin command `app-db` |
+| `TRANSLATE_SERVICE` | *(empty)* | Translation service name (e.g. LibreTranslate). Set = the team gets `app-update-languages` (see "Commands for the team") |
+| `ENV_TRANSLATE_UPDATE_MODELS` | `LIBRETRANSLATE_UPDATE_MODELS` | Variable `app-update-languages` sets to `true` for one run to download models. The compose file must use it as `${...}` in `environment:` |
+| `ENV_TRANSLATE_LANGUAGES` | `LIBRETRANSLATE_LANGUAGES` | Variable in `.env` with the list of languages (only shown in the output of `app-update-languages`) |
+| `APP_SCRIPTS` | `app-start … app-fetch` | Scripts the team may run with `sudo` (`app-branch` and `app-update-languages` are added automatically, see above) |
+| `ADMIN_SCRIPTS` | `(app-db)` | Commands for admins only (see "Commands for admins") |
+| `APP_LOGS_TAIL` | `200` | Lines shown by `sudo app-logs` |
+| `APP_LOGS_MAX` | `5000` | Most lines `sudo app-logs <N>` may ask for |
+| `TUNNEL_PORTS` | `()` | Test server only: ports on the server's `127.0.0.1` reachable through `ssh -L`, e.g. `(8025 9001)`. Empty = no forwarding |
 | `REPO_URL` | `git@github.com:USER/REPO.git` | SSH URL of the project |
 | `REPO_BRANCH` | `main` | Main branch: cloned first, the only one on production |
 | `DEPLOY_KEY` | `/root/.ssh/deploy_key` | Root's private key for GitHub |
 | `ENV_EXAMPLE` | `.env.example` | Template the `.env` is created from (path inside `APP_DIR`, e.g. `backend/.env.example`) |
-| `ENV_FILE` | `.env` | The project's `.env` (path inside `APP_DIR`, e.g. `backend/.env`). Must be the same file `compose.prod.yaml` uses |
+| `ENV_FILE` | `.env` | The project's `.env` (path inside `APP_DIR`, e.g. `backend/.env`). Must be the same file the compose files use |
+
+Before anything on the server is changed, `setup.sh` checks the settings and stops
+with an error that names the wrong one:
+
+- `IS_PRODUCTION` is `true` or `false`;
+- `COMPOSE_FILE_PROD`, `COMPOSE_FILE_DEV`, `ENV_EXAMPLE`, `ENV_FILE` are paths inside `APP_DIR`:
+  not absolute, no `..`, not empty (only `COMPOSE_FILE_DEV` may be empty);
+- `APP_LOGS_TAIL` and `APP_LOGS_MAX` are positive numbers, `APP_LOGS_TAIL` ≤ `APP_LOGS_MAX`;
+- `TUNNEL_PORTS` are port numbers (1-65535);
+- the old `COMPOSE_FILE` (renamed in 1.2.0) is not set.
 
 ## Production vs test server (`IS_PRODUCTION`)
 
@@ -114,6 +138,8 @@ All settings are at the top of `setup.sh`.
 | `app-branch` | **does not exist** (file and sudo rule removed) | installed, available to the team |
 | `app-deploy` | switches back to `REPO_BRANCH` if needed, then deploys | deploys the current branch |
 | `app-fetch` | available | available |
+| Compose file | `COMPOSE_FILE_PROD` | `COMPOSE_FILE_DEV` |
+| SSH port forwarding | off | `ssh -L` only, only to `127.0.0.1:<TUNNEL_PORTS>` (off while `TUNNEL_PORTS` is empty) |
 
 Any value other than `true` / `false` stops the script with an error, so a typo
 (`True`, `yes`) never picks a mode silently.
@@ -122,10 +148,35 @@ You can change the mode at any time: edit the variable and run `sudo ./setup.sh`
 again. When a test server becomes production, `app-branch` is deleted and the
 next `sudo app-deploy` returns the code to `REPO_BRANCH`.
 
+> When the mode changes, the `app-*` commands switch to the other compose file.
+> What happens to the old stack depends on the **compose project name**: the `name:` in the
+> file, or, without it, the name of the file's folder.
+>
+> - **Different names** (files in different folders, or different `name:`): two separate
+>   projects. The old stack keeps running: it still holds its ports, and a tunnel in it
+>   still serves its domain. Stop it first, e.g.
+>   `sudo docker compose -f /srv/app/backend/compose.dev.yaml down` (volumes are kept),
+>   then `sudo app-deploy`.
+> - **Same name** (e.g. both files in `backend/`): one project. `sudo app-deploy` recreates
+>   its containers from the new file and removes services the new file does not have
+>   (`--remove-orphans`); the volumes, including the database, are shared by both modes.
+
+A test server may run developer tools (e.g. Mailpit, a storage console) that the
+compose file publishes on the server's `127.0.0.1` only (`ports: ['127.0.0.1:8025:8025']`):
+Docker's published ports bypass UFW, so anything else would be open to the internet.
+List those ports in `TUNNEL_PORTS=(8025 9001)` and open them through an SSH tunnel:
+
+```bash
+ssh -N -L 8025:127.0.0.1:8025 -L 9001:127.0.0.1:9001 <user>@<server>
+```
+
+sshd refuses any destination not listed in `TUNNEL_PORTS` (`administratively prohibited`).
+
 ## Commands for the team
 
 Team members (every `keys/*.pub` except admins) can run exactly these commands
-with `sudo`, **without arguments**, and nothing else as root:
+with `sudo`, **without arguments** (the only exception: the number of lines for
+`app-logs`), and nothing else as root:
 
 | Command | What it does |
 |---|---|
@@ -133,16 +184,42 @@ with `sudo`, **without arguments**, and nothing else as root:
 | `sudo app-stop` | Stop the containers |
 | `sudo app-restart` | Restart the containers |
 | `sudo app-status` | Container status (`ps`) |
-| `sudo app-logs` | Last 200 log lines |
+| `sudo app-logs [N]` | Last `APP_LOGS_TAIL` log lines, or the last `N` (up to `APP_LOGS_MAX`) |
 | `sudo app-deploy` | `git pull` → build → recreate containers → `migrate --force` → `optimize` |
 | `sudo app-fetch` | Update the branch list from GitHub, show the current branch and whether it is behind |
 | `sudo app-branch` | **Test server only.** Pick a branch from a list, switch to it and redeploy |
+| `sudo app-update-languages` | **Only with `TRANSLATE_SERVICE`.** Download the models of languages added to `ENV_TRANSLATE_LANGUAGES` (`LIBRETRANSLATE_LANGUAGES`) in `.env`, then restart the service with updates off again |
 
-`app-deploy`, `app-fetch` and `app-branch` share one lock: if someone else is
+`app-update-languages` starts the service once with `ENV_TRANSLATE_UPDATE_MODELS=true`
+set in the shell. That only works if the compose file takes the switch from this variable
+through `${...}` in `environment:` (a value from `env_file:` is not overridden by the
+shell), and the models must be kept in a volume. For LibreTranslate:
+
+```yaml
+libretranslate:
+    environment:
+        LT_UPDATE_MODELS: '${LIBRETRANSLATE_UPDATE_MODELS:-false}'
+    volumes:
+        - 'libretranslate:/home/libretranslate/.local'
+```
+
+`app-deploy`, `app-fetch`, `app-branch` and `app-update-languages` share one lock: if someone else is
 deploying right now, the second command stops with a message instead of
 mixing up two builds.
 
 Read-only git commands work without `sudo`, e.g. `git -C /srv/app log --oneline -5`.
+
+## Commands for admins
+
+`ADMIN_SCRIPTS` are installed as `root:sudo 0750`: team members cannot run or even
+read them. Admins type them **without** `sudo`, the command asks for the password itself.
+
+| Command | What it does |
+|---|---|
+| `app-db [args]` | Database console in `DB_SERVICE` as the app's database user: `psql`, `mariadb` or `mysql`, picked by the container's `POSTGRES_USER` / `MARIADB_USER` / `MYSQL_USER`. Arguments go to the client: `app-db -c 'select 1'` (PostgreSQL), `app-db -e 'select 1'` (MySQL), `app-db < dump.sql` |
+
+A new admin command: add `templates/<name>.sh`, put the name into `ADMIN_SCRIPTS`,
+run `sudo ./setup.sh`.
 
 ## Testing a branch on the test server
 
@@ -194,8 +271,8 @@ ENV_EXAMPLE="backend/.env.example"
 ENV_FILE="backend/.env"
 ```
 
-Both are paths inside `APP_DIR`. An absolute path or `..` stops the script with
-an error.
+Both are paths inside `APP_DIR`. An absolute path, `..` or an empty value stops
+the script with an error (see the checks under [Settings](#settings)).
 
 Right after the project is cloned, `setup.sh`:
 
@@ -209,7 +286,9 @@ permissions. If the project has no `ENV_EXAMPLE`, the script warns and you
 create the file by hand.
 
 > `ENV_FILE` only tells `setup.sh` and the `app-*` commands where the file is.
-> `compose.prod.yaml` must use the same file itself, e.g. `env_file: ./backend/.env`.
+> The compose file must use the same file itself. The `app-*` commands run compose
+> from the compose file's own directory, so with `backend/compose.prod.yaml` a plain
+> `env_file: .env` already means `backend/.env` (and that `.env` also fills `${VAR}` in the file).
 
 The admin then only edits the values:
 
@@ -267,14 +346,17 @@ lib/
   firewall.sh       UFW
   docker.sh         Docker CE and daemon config
   repo.sh           deploy key, project clone, .env creation
-  app.sh            app-* scripts: builds them from templates/
+  app.sh            app-* and admin scripts: builds them from templates/
   scripts.sh        install/remove scripts, sudo rules
   systemd.sh, autostart.sh   systemd helpers
 templates/
   app-common.sh     helpers shared by the scripts below: lock, branch list, deploy
+  app-start.sh, app-stop.sh, app-restart.sh, app-status.sh, app-logs.sh
   app-deploy.sh     body of app-deploy
   app-fetch.sh      body of app-fetch
   app-branch.sh     body of app-branch (installed on a test server only)
+  app-update-languages.sh   body of app-update-languages (only with TRANSLATE_SERVICE)
+  app-db.sh         body of the admin command app-db
 ```
 
 ### Changing the `app-*` commands
@@ -282,16 +364,18 @@ templates/
 The commands in `/usr/local/bin` are generated on every run of `setup.sh`, so
 **do not edit them on the server**: the next run overwrites them.
 
-- `app-start`, `app-stop`, `app-restart`, `app-status`, `app-logs` are one-line
-  `docker compose` calls in `lib/app.sh`.
-- `app-deploy`, `app-fetch`, `app-branch` are built by `lib/app.sh` from three parts:
-  1. the settings (`APP_DIR`, `REPO_BRANCH`, `IS_PRODUCTION`, …) written at the top;
+- Every command (team and admin) is built by `lib/app.sh` from three parts:
+  1. the settings (`APP_DIR`, `REPO_BRANCH`, `IS_PRODUCTION`, …) written at the top
+     (admin commands start with one more line that re-runs them through `sudo`);
   2. `templates/app-common.sh`;
   3. `templates/<name>.sh`.
 
 To change a command, edit its template and run `sudo ./setup.sh` again. If a
 template is missing or has a syntax error, `setup.sh` stops and the installed
 command stays as it was.
+
+A new command: add `templates/<name>.sh` and put the name into `APP_SCRIPTS` (team,
+run with `sudo`, no arguments) or `ADMIN_SCRIPTS` (admins only).
 
 The templates are normal bash files, so editors highlight them and they can be
 checked before a run:
@@ -307,9 +391,37 @@ shellcheck templates/*.sh
 - Two copies of `setup.sh` cannot run at the same time (lock file).
 - Replaced config files are backed up to `/var/backups/server_setup/`.
 - Effective SSH config: `sudo sshd -T`. Firewall: `sudo ufw status verbose`.
-- sudo asks for a password for an `app-*` command → the command was run with arguments, or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
+- sudo asks for a password for an `app-*` command → the command was run with arguments (only
+  `app-logs <N>` with a number is allowed), or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
+- `Permission denied` for `app-db` → it is an admin command (`ADMIN_SCRIPTS`), team members cannot run it.
 
 ## Changelog
+
+### 1.2.0
+
+- `COMPOSE_FILE` is replaced by **`COMPOSE_FILE_PROD`** / **`COMPOSE_FILE_DEV`**: `IS_PRODUCTION` picks the one
+  the `app-*` commands use (an empty `COMPOSE_FILE_DEV` = the production file, as before).
+  **Rename the variable** in your copy of `setup.sh`: the old name stops the script with an error.
+- Compose now runs from the compose file's own directory (`--project-directory`), so a compose file in a
+  subfolder (`backend/compose.prod.yaml`) works with its own relative paths and `.env`. For a compose file
+  in the root of `APP_DIR` nothing changes.
+  ⚠️ Without `name:` in the compose file the project is named after its folder: moving the file from the
+  root into `backend/` starts a new project `backend` with **new, empty volumes** (database included),
+  while the old one keeps running. Put `name: app` (the old name) into the file before the move.
+- `sudo app-logs <N>`: number of lines on request (`APP_LOGS_TAIL` default, `APP_LOGS_MAX` limit).
+- **`app-update-languages`** for the team (only when `TRANSLATE_SERVICE` is set; the variable names are
+  `ENV_TRANSLATE_UPDATE_MODELS` / `ENV_TRANSLATE_LANGUAGES`, LibreTranslate's by default).
+- **Admin commands** (`ADMIN_SCRIPTS`, `root:sudo 0750`), first one: `app-db`.
+- Test server: SSH allows `ssh -L` to `127.0.0.1:<TUNNEL_PORTS>` (empty by default = no forwarding);
+  production still allows no forwarding. Unix socket forwarding is now off in both modes.
+- Compose files in a subfolder that were written with paths relative to `APP_DIR` (because of the old
+  `--project-directory`) must use paths relative to their own folder now.
+- Every `app-*` command is built from `templates/<name>.sh`.
+- **`FIREWALL_PORTS`**: the ports UFW opens besides SSH (were fixed to 80/443, still the default).
+- All path settings are checked at start, the compose files too: `COMPOSE_FILE_PROD`, `COMPOSE_FILE_DEV`,
+  `ENV_EXAMPLE` and `ENV_FILE` must be inside `APP_DIR` (no absolute path, no `..`), and only
+  `COMPOSE_FILE_DEV` may be empty. The new `APP_LOGS_TAIL` / `APP_LOGS_MAX` and `TUNNEL_PORTS` are checked
+  as well. The error names the wrong setting.
 
 ### 1.1.2
 

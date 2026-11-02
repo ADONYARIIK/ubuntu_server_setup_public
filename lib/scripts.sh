@@ -5,31 +5,42 @@
 # Where managed scripts are installed (already in everyone's PATH)
 SCRIPTS_BIN="/usr/local/bin"
 
-# _install_file TMP TARGET MODE - internal helper: install TMP as TARGET
-# (owner root:root, permissions MODE) unless TARGET is already identical.
+# Extra sudo rule per script: SCRIPT_ARGS[name]=<sudoers regex> lets the team pass
+# arguments matching it (sudo 1.9.10+; "^" ... "$" marks a regex). Scripts without
+# an entry may be run only without arguments. Filled in by create_app_scripts
+declare -A SCRIPT_ARGS=()
+
+# _install_file TMP TARGET MODE [GROUP=root] - internal helper: install TMP as TARGET
+# (owner root:GROUP, permissions MODE) unless TARGET is already identical.
+# Owner and mode are re-applied either way, so changing them here takes effect.
 # TMP is deleted in every case.
 _install_file() {
     local tmp="$1"
     local target="$2"
     local mode="$3"
+    local group="${4:-root}"
     
     if [ -f "$target" ] && cmp -s "$tmp" "$target"; then
-        log "Already up to date: $target"
         rm -f "$tmp"
+        chown "root:${group}" "$target"
+        chmod "$mode" "$target"
+        log "Already up to date: $target"
         return 0
     fi
     
-    install -m "$mode" -o root -g root "$tmp" "$target"
+    install -m "$mode" -o root -g "$group" "$tmp" "$target"
     rm -f "$tmp"
     log "Installed: $target"
 }
 
-# create_script NAME BODY - create /usr/local/bin/NAME from BODY
+# create_script NAME BODY [MODE=0755] [GROUP=root] - create /usr/local/bin/NAME from BODY
 # (shebang and "set -euo pipefail" are added automatically)
 # Example: create_script restart-app 'systemctl restart myapp'
 create_script() {
     local name="$1"
     local body="$2"
+    local mode="${3:-0755}"
+    local group="${4:-root}"
     local tmp
     tmp="$(mktemp)"
     
@@ -48,7 +59,7 @@ create_script() {
         return 1
     fi
     
-    _install_file "$tmp" "${SCRIPTS_BIN}/${name}" 0755
+    _install_file "$tmp" "${SCRIPTS_BIN}/${name}" "$mode" "$group"
 }
 
 # remove_script NAME - delete /usr/local/bin/NAME if it exists.
@@ -66,7 +77,8 @@ remove_script() {
 }
 
 # grant_script_access USER SCRIPT... - allow USER to run the given scripts
-# with "sudo SCRIPT" without a password. Rewrites the user's rule file
+# with "sudo SCRIPT" without a password (and with arguments matching
+# SCRIPT_ARGS[SCRIPT], if set). Rewrites the user's rule file
 # from scratch, so always pass the FULL list of scripts.
 grant_script_access() {
     local user="$1"
@@ -90,6 +102,9 @@ grant_script_access() {
         fi
         # The trailing "" means: only WITHOUT arguments ("sudo script --x" is refused)
         echo "${user} ALL=(root) NOPASSWD: ${SCRIPTS_BIN}/${script} \"\"" >> "$tmp"
+        if [ -n "${SCRIPT_ARGS[$script]:-}" ]; then
+            echo "${user} ALL=(root) NOPASSWD: ${SCRIPTS_BIN}/${script} ${SCRIPT_ARGS[$script]}" >> "$tmp"
+        fi
     done
     
     # Validate before installing: one broken file in /etc/sudoers.d breaks sudo entirely
