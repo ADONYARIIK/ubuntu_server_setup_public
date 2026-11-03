@@ -9,7 +9,7 @@ The script is **idempotent**: run it again after any change (a new key, a new
 setting) and it brings the server to the described state without breaking what
 is already there.
 
-**Version:** 1.2.0
+**Version:** 1.2.1
 
 ---
 
@@ -31,6 +31,7 @@ is already there.
     - [Changing the `app-*` commands](#changing-the-app--commands)
   - [Logs and troubleshooting](#logs-and-troubleshooting)
   - [Changelog](#changelog)
+    - [1.2.1](#121)
     - [1.2.0](#120)
     - [1.1.2](#112)
     - [1.1.1](#111)
@@ -392,10 +393,19 @@ shellcheck templates/*.sh
 - Replaced config files are backed up to `/var/backups/server_setup/`.
 - Effective SSH config: `sudo sshd -T`. Firewall: `sudo ufw status verbose`.
 - sudo asks for a password for an `app-*` command → the command was run with arguments (only
-  `app-logs <N>` with a number is allowed), or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
+  `app-logs` takes one), or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
+- `LINES must be a number from 1 to …` from `app-logs` → the argument is not one number up to `APP_LOGS_MAX`.
+- `regular expressions are not supported` / `wildcards are not allowed in command arguments` from `visudo` → the server runs sudo-rs (default since Ubuntu 25.10), which allows only `""` (no arguments) or a final `*` (any arguments) after a command in sudoers.
 - `Permission denied` for `app-db` → it is an admin command (`ADMIN_SCRIPTS`), team members cannot run it.
 
 ## Changelog
+
+### 1.2.1
+
+- `sudo app-logs <N>` with sudo-rs: the sudo rule is `app-logs *` and the script checks the number itself:
+  sudo-rs (Ubuntu 25.10+) has no patterns inside arguments. As before, only one number from 1 to
+  `APP_LOGS_MAX` gets through; any other argument is refused by `app-logs` with an error instead of a
+  sudo password prompt.
 
 ### 1.2.0
 

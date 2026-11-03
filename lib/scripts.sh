@@ -5,9 +5,11 @@
 # Where managed scripts are installed (already in everyone's PATH)
 SCRIPTS_BIN="/usr/local/bin"
 
-# Extra sudo rule per script: SCRIPT_ARGS[name]=<sudoers regex> lets the team pass
-# arguments matching it (sudo 1.9.10+; "^" ... "$" marks a regex). Scripts without
-# an entry may be run only without arguments. Filled in by create_app_scripts
+# Extra sudo rule per script: SCRIPT_ARGS[name]=<argument list> is written after the
+# command in a second rule. Scripts without an entry may be run only without arguments.
+# Only '*' ("any arguments") works with both implementations: sudo-rs (default sudo
+# since Ubuntu 25.10) rejects regexes and wildcards inside arguments, so a script
+# that gets '*' must check its arguments itself. Filled in by create_app_scripts
 declare -A SCRIPT_ARGS=()
 
 # _install_file TMP TARGET MODE [GROUP=root] - internal helper: install TMP as TARGET

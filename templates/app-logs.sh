@@ -4,7 +4,8 @@
 # Last log lines of every container:
 #   sudo app-logs        APP_LOGS_TAIL lines (setup.sh)
 #   sudo app-logs 1000   1000 lines, at most APP_LOGS_MAX
-# The sudo rule lets through one argument made of digits only; the range is checked here
+# The sudo rule allows any arguments (sudo-rs cannot limit them to digits), so this
+# script is the only check: nothing but one number from 1 to APP_LOGS_MAX gets through
 
 if [ "$#" -gt 1 ]; then
     echo "Usage: sudo app-logs [LINES]" >&2

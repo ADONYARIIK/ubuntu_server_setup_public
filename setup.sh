@@ -1,10 +1,10 @@
 #!/bin/bash
 # setup.sh - Ubuntu server base configuration
-# Requires: Ubuntu 24.04+ (tested target: 24.04), must be run as root
+# Requires: Ubuntu 24.04+ (tested target: 24.04; 25.10+ ships sudo-rs as sudo), must be run as root
 # Log: /var/log/server_setup_<date>_<time>.log (one file per run)
 
 
-# Version: 1.2.0
+# Version: 1.2.1
 # Usage: sudo ./setup.sh
 
 set -euo pipefail
@@ -15,7 +15,7 @@ export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
 # Script metadata
 # Keep in sync with "Version:" in the header
-SCRIPT_VERSION="1.2.0"
+SCRIPT_VERSION="1.2.1"
 # Absolute path of the directory with this script, so lib/ is found from any cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/server_setup_$(date +%Y%m%d_%H%M%S).log"

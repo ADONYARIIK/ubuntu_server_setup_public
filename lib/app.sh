@@ -73,10 +73,11 @@ create_app_scripts() {
         create_script "$name" "$script"
     done
 
-    # "sudo app-logs 1000": the only script whose sudo rule allows an argument.
-    # The regex lets through digits only; the script itself checks the range.
+    # "sudo app-logs 1000": the only script whose sudo rule allows arguments.
+    # '*' because sudo-rs has no patterns inside arguments; templates/app-logs.sh
+    # accepts exactly one number and refuses everything else.
     # shellcheck disable=SC2034,SC2154 # associative array declared in scripts.sh
-    SCRIPT_ARGS[app-logs]='^[1-9][0-9]*$'
+    SCRIPT_ARGS[app-logs]='*'
 
     # Turned off by a setting: the file is deleted, and grant_scripts_to_team
     # (called after this) drops its sudo rule
