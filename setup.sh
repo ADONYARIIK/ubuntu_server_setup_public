@@ -4,8 +4,8 @@
 # Log: /var/log/server_setup_<date>_<time>.log (one file per run)
 
 
-# Version: 1.2.1
-# Usage: sudo ./setup.sh
+# Version: 1.3.0
+# Usage: sudo ./setup.sh   (help: ./setup.sh --help)
 
 set -euo pipefail
 
@@ -15,7 +15,7 @@ export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=a
 
 # Script metadata
 # Keep in sync with "Version:" in the header
-SCRIPT_VERSION="1.2.1"
+SCRIPT_VERSION="1.3.0"
 # Absolute path of the directory with this script, so lib/ is found from any cwd
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_FILE="/var/log/server_setup_$(date +%Y%m%d_%H%M%S).log"
@@ -52,7 +52,7 @@ COMPOSE_FILE_PROD="compose.prod.yaml"
 COMPOSE_FILE_DEV=""
 # Name of the Laravel service in the compose files (used for artisan commands)
 APP_SERVICE="app"
-# Database service (PostgreSQL, MySQL or MariaDB image), used by the admin script app-db
+# Database service (PostgreSQL, MySQL or MariaDB image), used by the admin scripts app-db and app-seed
 DB_SERVICE="pgsql"
 # Translate service (e.g. LibreTranslate): adds app-update-languages for the team.
 # Empty = no such script
@@ -69,7 +69,7 @@ APP_SCRIPTS=(app-start app-stop app-restart app-status app-logs app-deploy app-f
 # Scripts for ADMIN_USERS only (templates/<name>.sh). They are not in the team's sudo
 # rules and cannot even be read by the team; an admin runs them without "sudo",
 # they ask for the password themselves
-ADMIN_SCRIPTS=(app-db)
+ADMIN_SCRIPTS=(app-db app-seed)
 # app-logs: lines shown by "sudo app-logs" and the most "sudo app-logs <N>" may ask for
 APP_LOGS_TAIL=200
 APP_LOGS_MAX=5000
@@ -88,6 +88,35 @@ DEPLOY_KEY="/root/.ssh/deploy_key"
 # an existing ENV_FILE is never overwritten
 ENV_EXAMPLE=".env.example"
 ENV_FILE=".env"
+
+# --help is answered before the libraries, the root check and the lock: it works
+# for anyone, writes no log and changes nothing on the server
+usage() {
+    cat <<EOF
+Usage: sudo ./setup.sh
+
+Ubuntu server setup v${SCRIPT_VERSION}. Brings the server to the state described by the
+settings at the top of this file; safe to run again after every change (new key, new setting).
+
+  users from keys/<name>.pub, admins (${ADMIN_USERS[*]}), SSH on port ${SSH_PORT} (keys only),
+  UFW + fail2ban, Docker, the project ${REPO_URL} (${REPO_BRANCH}) in ${APP_DIR},
+  the team's app-* commands and the admin commands (${ADMIN_SCRIPTS[*]}).
+
+This server: IS_PRODUCTION=${IS_PRODUCTION}
+Log of every run: /var/log/server_setup_<date>_<time>.log
+Every app-* command has its own help: sudo app-start --help, app-db --help, ...
+EOF
+}
+
+case "${1:-}" in
+    -h|--help) usage
+               exit 0 ;;
+    "") ;;
+    *) echo "Unknown argument: $1" >&2
+       echo "Usage: sudo ./setup.sh   (help: ./setup.sh --help)" >&2
+       exit 1 ;;
+esac
+
 
 # Load common.sh first: every other module uses log/warn/error from it
 source "$SCRIPT_DIR"/lib/common.sh

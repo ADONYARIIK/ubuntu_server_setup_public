@@ -6,8 +6,9 @@
 SCRIPTS_BIN="/usr/local/bin"
 
 # Extra sudo rule per script: SCRIPT_ARGS[name]=<argument list> is written after the
-# command in a second rule. Scripts without an entry may be run only without arguments.
-# Only '*' ("any arguments") works with both implementations: sudo-rs (default sudo
+# command in one more rule. Scripts without an entry may be run only without arguments
+# or with exactly --help.
+# Of the patterns, only '*' ("any arguments") works with both implementations: sudo-rs (default sudo
 # since Ubuntu 25.10) rejects regexes and wildcards inside arguments, so a script
 # that gets '*' must check its arguments itself. Filled in by create_app_scripts
 declare -A SCRIPT_ARGS=()
@@ -79,8 +80,8 @@ remove_script() {
 }
 
 # grant_script_access USER SCRIPT... - allow USER to run the given scripts
-# with "sudo SCRIPT" without a password (and with arguments matching
-# SCRIPT_ARGS[SCRIPT], if set). Rewrites the user's rule file
+# with "sudo SCRIPT" or "sudo SCRIPT --help" without a password (and with arguments
+# matching SCRIPT_ARGS[SCRIPT], if set). Rewrites the user's rule file
 # from scratch, so always pass the FULL list of scripts.
 grant_script_access() {
     local user="$1"
@@ -104,6 +105,10 @@ grant_script_access() {
         fi
         # The trailing "" means: only WITHOUT arguments ("sudo script --x" is refused)
         echo "${user} ALL=(root) NOPASSWD: ${SCRIPTS_BIN}/${script} \"\"" >> "$tmp"
+        # Exactly "--help" and nothing else. A literal argument, no pattern: sudo and
+        # sudo-rs both compare it as plain text. Every script prints its help before
+        # doing anything
+        echo "${user} ALL=(root) NOPASSWD: ${SCRIPTS_BIN}/${script} --help" >> "$tmp"
         if [ -n "${SCRIPT_ARGS[$script]:-}" ]; then
             echo "${user} ALL=(root) NOPASSWD: ${SCRIPTS_BIN}/${script} ${SCRIPT_ARGS[$script]}" >> "$tmp"
         fi

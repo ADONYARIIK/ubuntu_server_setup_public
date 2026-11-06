@@ -19,7 +19,7 @@ install_docker() {
         log "Downloaded docker GPG key"
     fi
     
-    # Add the Docker's repository to Apt sources
+    # Add Docker's repository to Apt sources
     local codename arch
     # Ubuntu codename, e.g. "noble" (UBUNTU_CODENAME also works on Ubuntu-based distros)
     codename="$(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}")"

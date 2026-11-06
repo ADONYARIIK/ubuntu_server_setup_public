@@ -8,7 +8,7 @@ configure_firewall() {
 
     log "Configuring UFW firewall..."
     
-    # Resets creates a repeatable baseline, but removes existing UFW rules
+    # Reset creates a repeatable baseline, but removes existing UFW rules
     ufw --force reset >> "$LOG_FILE" 2>&1
     ufw default deny incoming >> "$LOG_FILE" 2>&1
     ufw default allow outgoing >> "$LOG_FILE" 2>&1

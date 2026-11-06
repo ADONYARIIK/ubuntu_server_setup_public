@@ -3,4 +3,10 @@
 
 # Stop the containers; data and containers stay (start again: app-start)
 
+usage="Usage: sudo app-stop
+
+Stop the app's containers. The containers and the data stay:
+start them again with sudo app-start."
+no_args "$usage" "$@"
+
 "${COMPOSE[@]}" stop

@@ -10,6 +10,16 @@
 #   app-db -c 'select count(*) from users'   one query (PostgreSQL; MySQL/MariaDB: -e)
 #   app-db < dump.sql                        run a file
 
+usage="Usage: app-db [CLIENT ARGUMENTS]   (admins only, no sudo needed)
+
+Database console in the ${DB_SERVICE} container, as the app's database user
+(psql, mariadb or mysql, picked by the container's environment).
+  app-db                                   interactive session
+  app-db -c 'select count(*) from users'   one query (PostgreSQL; MySQL/MariaDB: -e)
+  app-db < dump.sql                        run a file
+The client's own help: app-db -?"
+handle_help "$usage" "$@"
+
 # No TTY when the input is a file or a pipe: with one, the client would mangle the input
 tty=()
 if [ ! -t 0 ]; then

@@ -9,7 +9,7 @@ The script is **idempotent**: run it again after any change (a new key, a new
 setting) and it brings the server to the described state without breaking what
 is already there.
 
-**Version:** 1.2.1
+**Version:** 1.3.0
 
 ---
 
@@ -22,15 +22,16 @@ is already there.
   - [Settings](#settings)
   - [Production vs test server (`IS_PRODUCTION`)](#production-vs-test-server-is_production)
   - [Commands for the team](#commands-for-the-team)
+  - [Commands for admins](#commands-for-admins)
   - [Testing a branch on the test server](#testing-a-branch-on-the-test-server)
   - [The `.env` file](#the-env-file)
   - [Users and access](#users-and-access)
     - [Storing the keys in git](#storing-the-keys-in-git)
-  - [Commands for admins](#commands-for-admins)
   - [Repository structure](#repository-structure)
     - [Changing the `app-*` commands](#changing-the-app--commands)
   - [Logs and troubleshooting](#logs-and-troubleshooting)
   - [Changelog](#changelog)
+    - [1.3.0](#130)
     - [1.2.1](#121)
     - [1.2.0](#120)
     - [1.1.2](#112)
@@ -57,7 +58,7 @@ In order:
 9. Clones the project into `APP_DIR` with a read-only deploy key and **creates `.env` from `.env.example`**
    (they can be in a subfolder, see [The `.env` file](#the-env-file)).
 10. Installs the `app-*` scripts and lets team members run them with `sudo`, plus admin-only
-    commands (`ADMIN_SCRIPTS`, e.g. `app-db`).
+    commands (`ADMIN_SCRIPTS`: `app-db`, `app-seed`).
 
 ## Quick start
 
@@ -74,7 +75,7 @@ cp ~/anna.pub   keys/anna.pub
 #    if Laravel is not in the root of the project)
 vim setup.sh
 
-# 3. Run
+# 3. Run (./setup.sh --help shows what it will do and the main settings)
 sudo ./setup.sh
 ```
 
@@ -106,12 +107,12 @@ All settings are at the top of `setup.sh`.
 | `COMPOSE_FILE_PROD` | `compose.prod.yaml` | Compose file of a production server (path inside `APP_DIR`, e.g. `backend/compose.prod.yaml`) |
 | `COMPOSE_FILE_DEV` | *(empty)* | Compose file of a test server (`IS_PRODUCTION=false`), e.g. `compose.dev.yaml`. Empty = `COMPOSE_FILE_PROD` |
 | `APP_SERVICE` | `app` | Laravel service name (used for `php artisan`) |
-| `DB_SERVICE` | `pgsql` | Database service (official PostgreSQL, MySQL or MariaDB image), used by the admin command `app-db` |
+| `DB_SERVICE` | `pgsql` | Database service (official PostgreSQL, MySQL or MariaDB image), used by the admin commands `app-db` and `app-seed` |
 | `TRANSLATE_SERVICE` | *(empty)* | Translation service name (e.g. LibreTranslate). Set = the team gets `app-update-languages` (see "Commands for the team") |
 | `ENV_TRANSLATE_UPDATE_MODELS` | `LIBRETRANSLATE_UPDATE_MODELS` | Variable `app-update-languages` sets to `true` for one run to download models. The compose file must use it as `${...}` in `environment:` |
 | `ENV_TRANSLATE_LANGUAGES` | `LIBRETRANSLATE_LANGUAGES` | Variable in `.env` with the list of languages (only shown in the output of `app-update-languages`) |
 | `APP_SCRIPTS` | `app-start … app-fetch` | Scripts the team may run with `sudo` (`app-branch` and `app-update-languages` are added automatically, see above) |
-| `ADMIN_SCRIPTS` | `(app-db)` | Commands for admins only (see "Commands for admins") |
+| `ADMIN_SCRIPTS` | `(app-db app-seed)` | Commands for admins only (see "Commands for admins") |
 | `APP_LOGS_TAIL` | `200` | Lines shown by `sudo app-logs` |
 | `APP_LOGS_MAX` | `5000` | Most lines `sudo app-logs <N>` may ask for |
 | `TUNNEL_PORTS` | `()` | Test server only: ports on the server's `127.0.0.1` reachable through `ssh -L`, e.g. `(8025 9001)`. Empty = no forwarding |
@@ -176,7 +177,7 @@ sshd refuses any destination not listed in `TUNNEL_PORTS` (`administratively pro
 ## Commands for the team
 
 Team members (every `keys/*.pub` except admins) can run exactly these commands
-with `sudo`, **without arguments** (the only exception: the number of lines for
+with `sudo`, **without arguments** (the exceptions: `--help`, and the number of lines for
 `app-logs`), and nothing else as root:
 
 | Command | What it does |
@@ -204,9 +205,14 @@ libretranslate:
         - 'libretranslate:/home/libretranslate/.local'
 ```
 
-`app-deploy`, `app-fetch`, `app-branch` and `app-update-languages` share one lock: if someone else is
-deploying right now, the second command stops with a message instead of
+`app-deploy`, `app-fetch`, `app-branch`, `app-update-languages` and the admin command `app-seed` share
+one lock: if someone else is deploying right now, the second command stops with a message instead of
 mixing up two builds.
+
+Every command explains itself: `sudo app-start --help`. It also works without `sudo`, and there `-h`
+is accepted too (the sudo rules allow only the exact `--help`).
+The help is printed before the command does anything, with this server's values filled in
+(the main branch, the `.env` path, the log line limits).
 
 Read-only git commands work without `sudo`, e.g. `git -C /srv/app log --oneline -5`.
 
@@ -214,10 +220,29 @@ Read-only git commands work without `sudo`, e.g. `git -C /srv/app log --oneline 
 
 `ADMIN_SCRIPTS` are installed as `root:sudo 0750`: team members cannot run or even
 read them. Admins type them **without** `sudo`, the command asks for the password itself.
+`app-db --help` and `app-seed --help` print their help without asking for the password
+(the client's own help: `app-db -?`).
 
 | Command | What it does |
 |---|---|
 | `app-db [args]` | Database console in `DB_SERVICE` as the app's database user: `psql`, `mariadb` or `mysql`, picked by the container's `POSTGRES_USER` / `MARIADB_USER` / `MYSQL_USER`. Arguments go to the client: `app-db -c 'select 1'` (PostgreSQL), `app-db -e 'select 1'` (MySQL), `app-db < dump.sql` |
+| `app-seed [--fresh] [--class=NAME] [--yes]` | Fill the database with the project's seeders, so the app does not start empty. `app-seed` = `db:seed` (adds records to the current database), `--class=NAME` = only that seeder, `--fresh` = **test server only**: drop every table, migrate again, seed (`migrate:fresh --seed`). Asks to type `yes` first; `--yes` skips the question |
+
+`app-seed` details:
+
+- It shares the lock of `app-deploy`, so it never runs in the middle of a deploy, and needs
+  `APP_SERVICE` to be running (`sudo app-start` / `sudo app-deploy` first).
+- `--fresh` is refused when `IS_PRODUCTION=true`: it deletes the real data. On a PostgreSQL
+  database it adds `--drop-types`, otherwise enum types survive and the next migration fails.
+- With `TRANSLATE_SERVICE` set, it first waits until the service is healthy, for seeders that
+  translate their data.
+- Afterwards it runs `cache:clear`, so lists cached while the database was empty do not hide the new records.
+- Seeders that use factories need **Faker, a dev package**. An image built with
+  `composer install --no-dev` (the usual production build) does not have it, and the seeding fails
+  with `Class "Faker\..." not found`. Seed a test server whose image installs the dev packages,
+  or write seeders without factories for production.
+- Plain `app-seed` adds records: a second run can fail on a seeder that creates a fixed record
+  (an admin with a set e-mail). To start over on a test server: `app-seed --fresh`.
 
 A new admin command: add `templates/<name>.sh`, put the name into `ADMIN_SCRIPTS`,
 run `sudo ./setup.sh`.
@@ -351,13 +376,14 @@ lib/
   scripts.sh        install/remove scripts, sudo rules
   systemd.sh, autostart.sh   systemd helpers
 templates/
-  app-common.sh     helpers shared by the scripts below: lock, branch list, deploy
+  app-common.sh     helpers shared by the scripts below: help, lock, branch list, deploy
   app-start.sh, app-stop.sh, app-restart.sh, app-status.sh, app-logs.sh
   app-deploy.sh     body of app-deploy
   app-fetch.sh      body of app-fetch
   app-branch.sh     body of app-branch (installed on a test server only)
   app-update-languages.sh   body of app-update-languages (only with TRANSLATE_SERVICE)
   app-db.sh         body of the admin command app-db
+  app-seed.sh       body of the admin command app-seed
 ```
 
 ### Changing the `app-*` commands
@@ -376,13 +402,17 @@ template is missing or has a syntax error, `setup.sh` stops and the installed
 command stays as it was.
 
 A new command: add `templates/<name>.sh` and put the name into `APP_SCRIPTS` (team,
-run with `sudo`, no arguments) or `ADMIN_SCRIPTS` (admins only).
+run with `sudo`, no arguments) or `ADMIN_SCRIPTS` (admins only). Start the template with its help:
+`usage="..."`, then `no_args "$usage" "$@"`, or `handle_help "$usage" "$@"` if it takes arguments.
+Every team command gets a `--help` sudo rule, and a template without this check would ignore `--help`
+and simply run.
 
 The templates are normal bash files, so editors highlight them and they can be
 checked before a run:
 
 ```bash
-bash -n setup.sh lib/*.sh templates/*.sh
+# bash -n reads one file: with several, the others are only arguments and stay unchecked
+for f in setup.sh lib/*.sh templates/*.sh; do bash -n "$f"; done
 shellcheck templates/*.sh
 ```
 
@@ -393,12 +423,27 @@ shellcheck templates/*.sh
 - Replaced config files are backed up to `/var/backups/server_setup/`.
 - Effective SSH config: `sudo sshd -T`. Firewall: `sudo ufw status verbose`.
 - sudo asks for a password for an `app-*` command → the command was run with arguments (only
-  `app-logs` takes one), or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
+  `--help`, or one number for `app-logs`, are allowed), or it is not in `APP_SCRIPTS` (e.g. `app-branch` on production).
 - `LINES must be a number from 1 to …` from `app-logs` → the argument is not one number up to `APP_LOGS_MAX`.
-- `regular expressions are not supported` / `wildcards are not allowed in command arguments` from `visudo` → the server runs sudo-rs (default since Ubuntu 25.10), which allows only `""` (no arguments) or a final `*` (any arguments) after a command in sudoers.
-- `Permission denied` for `app-db` → it is an admin command (`ADMIN_SCRIPTS`), team members cannot run it.
+- `regular expressions are not supported` / `wildcards are not allowed in command arguments` from `visudo` → the server runs sudo-rs (default since Ubuntu 25.10), which allows only `""` (no arguments), a literal argument (`--help`) or a final `*` (any arguments) after a command in sudoers.
+- `Permission denied` for `app-db` or `app-seed` → it is an admin command (`ADMIN_SCRIPTS`), team members cannot run it.
+- `Class "Faker\..." not found` from `app-seed` → the image has no dev packages (see "Commands for admins").
 
 ## Changelog
+
+### 1.3.0
+
+- New admin command **`app-seed`**: fills the database with the project's seeders (`db:seed`, or one seeder
+  with `--class=NAME`), so a new server does not start with an empty app. `app-seed --fresh` rebuilds the
+  database from scratch (`migrate:fresh --seed`, plus `--drop-types` on PostgreSQL) and is refused on a production
+  server. Asks for confirmation (`--yes` to skip), uses the deploy lock, waits for `TRANSLATE_SERVICE` and clears
+  the app cache afterwards. Added to the default `ADMIN_SCRIPTS`: `(app-db app-seed)`.
+- **`--help` for every script**: `./setup.sh --help` and every `app-*` command (`-h` too, without `sudo`). The help is printed
+  before anything else runs, with the server's values filled in. Team members get one more sudo rule per
+  command, `<command> --help` (a literal argument, so it works with sudo-rs as well); admin commands answer
+  `--help` without asking for the password. A team command run without `sudo` and with an unknown argument
+  now stops with its help instead of ignoring the argument; `setup.sh` also stops on an unknown argument
+  and points to `--help`.
 
 ### 1.2.1
 

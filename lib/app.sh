@@ -1,8 +1,8 @@
 # shellcheck shell=bash
 # app.sh - management scripts for the docker compose project
 
-# One lock for every script that changes the code or the containers
-# (app-deploy, app-fetch, app-branch, app-update-languages): two people deploying
+# One lock for every script that changes the code, the containers or the database
+# (app-deploy, app-fetch, app-branch, app-update-languages, app-seed): two people deploying
 # at the same time would mix up checkouts and builds
 APP_LOCK="/run/app-scripts.lock"
 
@@ -11,9 +11,10 @@ APP_LOCK="/run/app-scripts.lock"
 APP_TEMPLATES="$SCRIPT_DIR/templates"
 
 # First lines of every admin script: a non-root admin is re-run through sudo
-# (asks for the admin's password), so "app-db" works without typing "sudo"
+# (asks for the admin's password), so "app-db" works without typing "sudo".
+# --help and -h stay without sudo: the help needs no password and changes nothing
 # shellcheck disable=SC2016 # $0 / $@ must stay literal: they belong to the generated script
-ADMIN_ELEVATE='if [ "$(id -u)" -ne 0 ]; then exec sudo -- "$0" "$@"; fi'
+ADMIN_ELEVATE='if [ "$(id -u)" -ne 0 ] && [ "$*" != --help ] && [ "$*" != -h ]; then exec sudo -- "$0" "$@"; fi'
 
 # _app_script_header - settings baked into the generated scripts at setup time.
 # printf %q quotes every value, so paths with spaces etc. cannot break the script.
@@ -73,9 +74,9 @@ create_app_scripts() {
         create_script "$name" "$script"
     done
 
-    # "sudo app-logs 1000": the only script whose sudo rule allows arguments.
+    # "sudo app-logs 1000": the only script whose sudo rule allows any arguments.
     # '*' because sudo-rs has no patterns inside arguments; templates/app-logs.sh
-    # accepts exactly one number and refuses everything else.
+    # accepts exactly one number (or --help, -h) and refuses everything else.
     # shellcheck disable=SC2034,SC2154 # associative array declared in scripts.sh
     SCRIPT_ARGS[app-logs]='*'
 

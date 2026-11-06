@@ -4,6 +4,13 @@
 # Refresh the list of branches from GitHub and show what is deployed now.
 # Allowed on production too: it only updates refs/remotes/*, the code is not touched
 
+usage="Usage: sudo app-fetch
+
+Refresh the list of branches from GitHub, show the current branch and
+how many commits it is behind. The running code is not changed:
+to deploy the new commits, use sudo app-deploy."
+no_args "$usage" "$@"
+
 take_lock
 cd "$APP_DIR"
 

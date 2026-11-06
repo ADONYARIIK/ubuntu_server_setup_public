@@ -3,4 +3,9 @@
 
 # State of the containers: running, healthy, exited
 
+usage="Usage: sudo app-status
+
+Show the state of the app's containers: running, healthy, exited."
+no_args "$usage" "$@"
+
 "${COMPOSE[@]}" ps

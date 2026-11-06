@@ -150,7 +150,8 @@ setup_team_users() {
 #   - ADMIN_USERS are never deleted
 #   - system accounts (UID outside UID_MIN..UID_MAX from /etc/login.defs) are never deleted
 #   - the admin running this script via sudo is never deleted
-# The home directory is deleted together with the user (userdel --remove)
+# The home directory is archived to /var/backups/server_setup, then deleted together
+# with the user (userdel --remove)
 remove_stale_users() {
     local uid_min uid_max members username uid home_dir
     local keys_dir="$SCRIPT_DIR/keys"

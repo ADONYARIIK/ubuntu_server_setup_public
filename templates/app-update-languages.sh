@@ -8,6 +8,14 @@
 # until this runs. Afterwards the service is started again with updates off: otherwise
 # any later restart (reboot, crash) would quietly fetch new models and change the translations
 
+usage="Usage: sudo app-update-languages
+
+Download the language models of ${TRANSLATE_SERVICE}: the languages added to
+${ENV_TRANSLATE_LANGUAGES} in ${ENV_FILE}, and newer versions of the others.
+Then restarts ${TRANSLATE_SERVICE} with model updates off again.
+The download can take several minutes."
+no_args "$usage" "$@"
+
 take_lock
 
 echo "Starting ${TRANSLATE_SERVICE} with model updates on. The download can take several minutes..."

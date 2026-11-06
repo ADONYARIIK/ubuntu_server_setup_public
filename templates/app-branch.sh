@@ -1,8 +1,15 @@
 # shellcheck shell=bash
 # shellcheck disable=SC2154,SC2164 # variables come from the generated header, "set -e" is added by create_script
 
-# Interactive (sudo rules allow NO arguments): pick a branch from a numbered list.
+# Interactive (the sudo rules allow no arguments, only --help): pick a branch from a numbered list.
 # Only branches that really exist on GitHub can be chosen
+
+usage="Usage: sudo app-branch
+
+Test server only. Pick a branch from a numbered list of the branches on GitHub,
+switch to it and redeploy (build, migrate). Asks before switching.
+Back to the main branch: sudo app-branch -> ${REPO_BRANCH}."
+no_args "$usage" "$@"
 
 take_lock
 cd "$APP_DIR"

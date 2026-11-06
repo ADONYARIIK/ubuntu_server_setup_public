@@ -5,7 +5,14 @@
 #   sudo app-logs        APP_LOGS_TAIL lines (setup.sh)
 #   sudo app-logs 1000   1000 lines, at most APP_LOGS_MAX
 # The sudo rule allows any arguments (sudo-rs cannot limit them to digits), so this
-# script is the only check: nothing but one number from 1 to APP_LOGS_MAX gets through
+# script is the only check: nothing but --help (-h) or one number from 1 to APP_LOGS_MAX gets through
+
+usage="Usage: sudo app-logs [LINES]
+
+Show the last log lines of every container of the app.
+  sudo app-logs        the last ${APP_LOGS_TAIL} lines
+  sudo app-logs 1000   the last 1000 lines (at most ${APP_LOGS_MAX})"
+handle_help "$usage" "$@"
 
 if [ "$#" -gt 1 ]; then
     echo "Usage: sudo app-logs [LINES]" >&2
